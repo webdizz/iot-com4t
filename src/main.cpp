@@ -11,6 +11,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
+#include <Ticker.h>
+
 // GPIO5
 #define ONE_WIRE_BUS 5
 #define TEMPERATURE_PRECISION 9
@@ -51,21 +53,15 @@ void setUpThermoSensor()
   }
 }
 
-// function to print the temperature for a device
-void printTemperature(DeviceAddress deviceAddress)
-{
-  float tempC = tempSensor.getTempC(deviceAddress);
-  if (tempC != recentTemperature)
-  {
-    recentTemperature = tempC;
-    Serial.printf("Current Temperature is %fC ", recentTemperature);
-  }
-}
-
 void retrieveTemperature()
 {
   tempSensor.requestTemperatures();
-  printTemperature(insideThermometer);
+  float tempC = tempSensor.getTempC(insideThermometer);
+  if (tempC != recentTemperature)
+  {
+    recentTemperature = tempC;
+    Serial.printf("Current Temperature is %.1fC ", recentTemperature);
+  }
 }
 
 void connectToWiFi()
@@ -126,18 +122,24 @@ void connectToWiFi()
   Serial.println("closing connection");
 }
 
+Ticker temperatureTicker(retrieveTemperature, 5000);
+
 void setup()
 {
   // put your setup code here, to run once:
   Serial.begin(9600);
 
-  delay(100);
+  // setup for temperature retrieving
   setUpThermoSensor();
+  temperatureTicker.start();
+
   // connectToWiFi();
 }
 
 void loop()
 {
   // put your main code here, to run repeatedly:
-  retrieveTemperature();
+
+  //retrieve temperature
+  temperatureTicker.update();
 }
