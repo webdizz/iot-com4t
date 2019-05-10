@@ -60,7 +60,7 @@ void retrieveTemperature()
   if (tempC != recentTemperature)
   {
     recentTemperature = tempC;
-    Serial.printf("Current Temperature is %.1fC ", recentTemperature);
+    Serial.printf("Current Temperature is %.1fC\n", recentTemperature);
   }
 }
 
