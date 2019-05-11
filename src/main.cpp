@@ -14,9 +14,9 @@
 #include <Ticker.h>
 
 // GPIO5
-#define ONE_WIRE_BUS 5
+#define GPIO_TEMPERATURE_ONE_WIRE_BUS 5
 #define TEMPERATURE_PRECISION 9
-OneWire oneWire(ONE_WIRE_BUS);
+OneWire oneWire(GPIO_TEMPERATURE_ONE_WIRE_BUS);
 
 DallasTemperature tempSensor(&oneWire);
 DeviceAddress insideThermometer;
@@ -32,6 +32,7 @@ const char fingerprint[] PROGMEM = "5F F1 60 31 09 04 3E F2 90 D2 B0 8A 50 38 04
 
 void setUpThermoSensor()
 {
+  // pinMode(GPIO_TEMPERATURE_ONE_WIRE_BUS, INPUT);
   tempSensor.begin();
 
   // locate devices on the bus
@@ -56,6 +57,7 @@ void setUpThermoSensor()
 void retrieveTemperature()
 {
   tempSensor.requestTemperatures();
+  delay(100);
   float tempC = tempSensor.getTempC(insideThermometer);
   if (tempC != recentTemperature)
   {
@@ -129,17 +131,17 @@ void setup()
   // put your setup code here, to run once:
   Serial.begin(9600);
 
+  connectToWiFi();
+
   // setup for temperature retrieving
   setUpThermoSensor();
   temperatureTicker.start();
 
-  // connectToWiFi();
 }
 
 void loop()
 {
-  // put your main code here, to run repeatedly:
-
   //retrieve temperature
   temperatureTicker.update();
+
 }
