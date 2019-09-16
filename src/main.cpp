@@ -1,147 +1,69 @@
 #include <Arduino.h>
+#include "Thing.h"
+#include "WebThingAdapter.h"
+#include "WiFiCfg.h"
+#include "FS.h"
 
-#include <ESP8266WiFi.h>
-#include <WiFiClientSecure.h>
-
-#include <DNSServer.h>
-#include <ESP8266WebServer.h>
-#include <WiFiManager.h>
-
-// temperature sensor
-#include <OneWire.h>
-#include <DallasTemperature.h>
-
+#include <DHT.h>
 #include <Ticker.h>
 
-// GPIO5
-#define GPIO_TEMPERATURE_ONE_WIRE_BUS 5
-#define TEMPERATURE_PRECISION 9
-OneWire oneWire(GPIO_TEMPERATURE_ONE_WIRE_BUS);
+struct WiFiConnection wiFiConnection;
 
-DallasTemperature tempSensor(&oneWire);
-DeviceAddress insideThermometer;
+WebThingAdapter *adapter;
 
-float recentTemperature = 0.00;
+#if defined(LED_BUILTIN)
+const int ledPin = LED_BUILTIN;
+#else
+const int ledPin = 13; // manually configure LED pin
+#endif
 
-const char *host = "api.github.com";
-const int httpsPort = 443;
+#define DHTPIN 13
+#define DHTTYPE           DHT22     // DHT 22 (AM2302)
+DHT dht(DHTPIN, DHTTYPE);
 
-// Use web browser to view and copy
-// SHA1 fingerprint of the certificate
-const char fingerprint[] PROGMEM = "5F F1 60 31 09 04 3E F2 90 D2 B0 8A 50 38 04 E8 37 9F BC 76";
+const char* deviceTypes[] = {"MultiSensor", "Sensor", nullptr};
+ThingDevice dht22("dht22", "Temperature and Humidity sensor", deviceTypes);
+ThingProperty temperatureProperty("temperature", "Temperature", NUMBER, "Temperature");
+ThingProperty humidityProperty("humidity", "Humidity", NUMBER, "Humidity");
 
-void setUpThermoSensor()
-{
-  // pinMode(GPIO_TEMPERATURE_ONE_WIRE_BUS, INPUT);
-  tempSensor.begin();
-
-  // locate devices on the bus
-  Serial.print("Locating devices...");
-  Serial.print("Found ");
-  Serial.print(tempSensor.getDeviceCount(), DEC);
-  Serial.println(" devices.");
-
-  // search for thermometer
-  oneWire.reset_search();
-  if (!oneWire.search(insideThermometer))
-  {
-    Serial.println("Unable to find address for insideThermometer");
-  }
-  else
-  {
-    // set the resolution to 9 bit
-    tempSensor.setResolution(insideThermometer, TEMPERATURE_PRECISION);
-  }
-}
-
-void retrieveTemperature()
-{
-  tempSensor.requestTemperatures();
-  delay(100);
-  float tempC = tempSensor.getTempC(insideThermometer);
-  if (tempC != recentTemperature)
-  {
-    recentTemperature = tempC;
-    Serial.printf("Current Temperature is %.1fC\n", recentTemperature);
-  }
-}
-
-void connectToWiFi()
-{
-  WiFiManager wifiManager;
-  wifiManager.autoConnect("NodeMCU");
-
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("WiFi connected");
-
-  // Use WiFiClientSecure class to create TLS connection
-  WiFiClientSecure client;
-  Serial.print("connecting to ");
-  Serial.println(host);
-
-  Serial.printf("Using fingerprint '%s'\n", fingerprint);
-  // client.setFingerprint(fingerprint);
-
-  // if (!client.connect(host, httpsPort))
-  // {
-  //   Serial.println("connection failed");
-  //   return;
-  // }
-
-  // String url = "/repos/esp8266/Arduino/commits/master/status";
-  // Serial.print("requesting URL: ");
-  // Serial.println(url);
-
-  // client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-  //              "Host: " + host + "\r\n" +
-  //              "User-Agent: BuildFailureDetectorESP8266\r\n" +
-  //              "Connection: close\r\n\r\n");
-
-  // Serial.println("request sent");
-  // while (client.connected())
-  // {
-  //   String line = client.readStringUntil('\n');
-  //   if (line == "\r")
-  //   {
-  //     Serial.println("headers received");
-  //     break;
-  //   }
-  // }
-  // String line = client.readStringUntil('\n');
-  // if (line.startsWith("{\"state\":\"success\""))
-  // {
-  //   Serial.println("esp8266/Arduino CI successfull!");
-  // }
-  // else
-  // {
-  //   Serial.println("esp8266/Arduino CI has failed");
-  // }
-
-  Serial.println("closing connection");
-}
-
-Ticker temperatureTicker(retrieveTemperature, 5000);
+void retrieveAirCondition();
+Ticker temperatureTicker(retrieveAirCondition, 5000);
 
 void setup()
 {
-  // put your setup code here, to run once:
-  Serial.begin(9600);
+  connect(ledPin, wiFiConnection);
 
-  connectToWiFi();
+  // setup 
+  adapter = new WebThingAdapter("IoT Comfort", WiFi.localIP());
+  dht22.addProperty(&temperatureProperty);
+  dht22.addProperty(&humidityProperty);
+  adapter->addDevice(&dht22);
+  adapter->begin();
 
-  // setup for temperature retrieving
-  setUpThermoSensor();
+  dht.begin();
+  delay(1000);
   temperatureTicker.start();
+}
 
+void retrieveAirCondition()
+{
+  if(dht.read())
+  {
+    int humidity = (int)dht.readHumidity();
+    int temperature = (int)dht.readTemperature();
+    
+    ThingPropertyValue humidityValue;
+    humidityValue.number = humidity;
+    humidityProperty.setValue(humidityValue);
+
+    ThingPropertyValue temperatureValue;
+    temperatureValue.number = temperature;
+    temperatureProperty.setValue(temperatureValue);
+  }
 }
 
 void loop()
 {
-  //retrieve temperature
+  adapter->update();
   temperatureTicker.update();
-
 }
